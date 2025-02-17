@@ -1,0 +1,68 @@
+//Authentication
+const express = require('express');
+const passport = require('passport');
+const session = require('express-session');
+const SteamStrategy = require('passport-steam').Strategy;
+
+const app = express();
+
+// Use sessions to store login state
+app.use(session({ secret: 'your_secret_key', resave: false, saveUninitialized: false }));
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Configure Passport with Steam OAuth
+passport.use(new SteamStrategy({
+    returnURL: 'http://localhost:3000/auth/steam/return',
+    realm: 'http://localhost:3000/',
+    apiKey: 'YOUR_STEAM_API_KEY'  // 🔴 Replace with your Steam API key
+}, (identifier, profile, done) => {
+    return done(null, profile);
+}));
+
+// Serialize and deserialize user
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((obj, done) => done(null, obj));
+
+app.get('/auth/steam/return', 
+    passport.authenticate('steam', { failureRedirect: '/' }),
+    (req, res) => {
+        res.redirect('/dashboard');  // Redirect after successful login
+    }
+);
+
+app.get('/dashboard', (req, res) => {
+    if (!req.isAuthenticated()) return res.redirect('/');
+    res.send(`Welcome ${req.user.displayName}!`);
+});
+
+
+//Database
+const mongoose = require('mongoose');
+
+mongoose.connect('mongodb://localhost/game_users', { useNewUrlParser: true, useUnifiedTopology: true });
+
+const UserSchema = new mongoose.Schema({
+    steamId: String,
+    username: String,
+    avatar: String
+});
+
+const User = mongoose.model('User', UserSchema);
+
+passport.use(new SteamStrategy({
+    returnURL: 'http://localhost:3000/auth/steam/return',
+    realm: 'http://localhost:3000/',
+    apiKey: 'YOUR_STEAM_API_KEY'
+}, async (identifier, profile, done) => {
+    let user = await User.findOne({ steamId: profile.id });
+    if (!user) {
+        user = new User({ 
+            steamId: profile.id,
+            username: profile.displayName,
+            avatar: profile.photos[0].value
+        });
+        await user.save();
+    }
+    return done(null, user);
+}));
