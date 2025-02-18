@@ -1,0 +1,53 @@
+// Tick Based for player movement
+using Unity.Netcode;
+using UnityEngine;
+
+public class PlayerSync : NetworkBehaviour
+{
+    private Vector3 lastPosition;
+    private const float tickRate = 0.1f; // Every 100ms
+    private float lastTickTime = 0f;
+
+    void Update()
+    {
+        if (!IsOwner) return;
+
+        lastTickTime += Time.deltaTime;
+        if (lastTickTime >= tickRate)
+        {
+            lastTickTime = 0f;
+            SendPositionUpdate();
+        }
+    }
+
+    void SendPositionUpdate()
+    {
+        if (Vector3.Distance(transform.position, lastPosition) > 0.01f)
+        {
+            lastPosition = transform.position;
+            UpdatePositionServerRpc(transform.position);
+        }
+    }
+
+    [ServerRpc]
+    void UpdatePositionServerRpc(Vector3 newPos)
+    {
+        transform.position = newPos;
+    }
+}
+
+// Syncing Player Health with a NetworkVariable
+using Unity.Netcode;
+
+public class PlayerHealth : NetworkBehaviour
+{
+    public NetworkVariable<int> health = new NetworkVariable<int>(100);
+
+    public void TakeDamage(int damage)
+    {
+        if (IsServer)
+        {
+            health.Value -= damage;
+        }
+    }
+}
